@@ -18,12 +18,13 @@ testcdepth: testcdepth.c
 clean:
 	rm -f testc testcread testcwrite testcdepth
 
-install: testc testcread testcwrite testcdepth
+install: testc testcread testcwrite testcdepth testc_init testc_master
 	cp testc /etc/boot.d/testc
 	cp testcread /usr/local/bin/testcread
 	cp testcwrite /usr/local/bin/testcwrite
 	cp testcdepth /usr/local/bin/testcdepth
 	cp testc_init /etc/install.d/init.d/testc
+	cp testc_master /etc/master.d/testc
 	chmod 755 /usr/local/bin/testcread /usr/local/bin/testcwrite /usr/local/bin/testcdepth /etc/install.d/init.d/testc
-	chmod 644 /etc/boot.d/testc
+	chmod 644 /etc/boot.d/testc /etc/master.d/testc
 	echo "Do not forget to run newconfig"
