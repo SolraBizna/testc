@@ -51,7 +51,9 @@ Called when a process reads/writes an open device. First argument is a `dev_t`, 
 
 Ahem.
 
-For read, use `uiomove(buf, num_bytes, UIO_READ, uio)` to copy bytes from `buf` into userspace. For write, use `uiomove(buf, num_bytes, UIO_WRITE, uio)` to copy bytes from userspace into `buf`. It will return 0 for success, some error code for failure. You will return 0 for success, some error code for failure. The number of bytes read/written is handled by `uiomove`, not you.
+`uiomove` moves bytes between kernel space and userspace. It has all kinds of complicated vectored IO and address space mapping support that I couldn't grok after five seconds of looking at the header. Fortunately, you don't have to worry about any of that. To implement `read`, all you have to do is call `uiomove(buf, num_bytes, UIO_READ, uio)` to copy that many bytes out of your `buf` and into wherever the caller wanted to put them. For `write`, you call `uiomove(buf, num_bytes, UIO_WRITE, uio)` and it will copy that many bytes into your `buf`, ready to be used in whatever nefarious scheme you have planned for them. `uiomove` will return 0 for success and an error code on error, and that's exactly what you need to return, which means you can return `uiomove`'s return value directly.
+
+How do you know how many bytes to copy out? I'm not sure. There's probably some `uio` function that does that. If you have a simple device driver that has a fixed-size record (like testc's one-byte "records"), you don't have to worry about it. If you try to write/read too many bytes, `uiomove` will return an error. If you try to write/read too few, the number that you actually wrote/read will be reported to userspace just fine. `uiomove` really is doing all the heavy lifting here.
 
 ## `select`
 
@@ -61,17 +63,25 @@ First parameter is a `dev_t`, second parameter is an `int`. It will have the val
 
 In `<sys/user.h>` is a global, `u`. In that global is a field, `u_procp`. If you save the value of this, and return 0, you can later pass that saved `u_procp` value as the first parameter to `selwakeup` (where the second parameter is some flag, 0 works), then the process that was `select`ing on you will wake up.
 
+If you don't want to implement wakeups, just implement a stub `select` function that always returns 1. This will prevent non-blocking IO with your device from being possible. Depending on what kind of device it is, that may be just fine.
+
+(What should you do if there's an exception select? I don't know. To be honest, I'm not even sure what it'd be used for. `testc` just returns 0 in that case, but always returning 1 instead is probably safer.)
+
 ## `ioctl`
 
-Include `<sys/ioctl.h>`. Define your `ioctl` with `_IOR` if it's like a read, `_IOW` if it's like a write, `_IOWR` if it's like both. (It would have been `_IORW` but "stdio got there first".) First parameter is (usually) a character constant, second parameter is a small ID number, combined they form a unique ioctl number. Third parameter is the type being read/written, often an `int`, sometimes a `struct`.
+Include `<sys/ioctl.h>`. Define `ioctl` request numbers with `_IOR` if the request is like a read, `_IOW` if it's like a write, `_IOWR` if it's like both. (It would have been `_IORW` but "stdio got there first".) First parameter is (usually) a character constant, second parameter is a small ID number, combined they form a unique ioctl request number. Third parameter is the type being read/written, often an `int`, sometimes a `struct`.
 
-Your `ioctl` function will receive four parameters. First is a `dev_t`. Second is the ioctl number. Third is a pointer to the type you gave as the third parameter to `_IO*`. Fourth is "arg", I honestly don't know what it's for. You do the read/write/action/whatever, return 0 for success or some errno code for failure. If the command is unrecognized, return `EINVAL`.
+Your `ioctl` function will receive four parameters. First is a `dev_t`. Second is the ioctl request number. Third is a pointer to the type you gave as the third parameter to `_IO*`. Fourth is "arg", I honestly don't know what it's for. You do the read/write/action/whatever, return 0 for success or some errno code for failure. If the command is unrecognized, return `EINVAL`.
 
-## Slot identification, interrupts...
+It's possible to make ioctl requests accept arbitrarily-long inputs and produce arbitrarily-long outputs, but you need to take greater care in defining (and decoding!?) your ioctl numbers, and... that's starting to sound a lot like something you should be implementing in terms of `read` or `write` instead.
+
+## Slot identification, interrupts, making simple non-blocking IO work...
 
 ¯\\_(ツ)_/¯
 
 This test driver requires [my paravirtualized framebuffer](https://github.com/SolraBizna/mac_qfb_driver) to be in NuBus slot C. It will only be picked up by `autoconfig` if the card is installed, and it will only be able to do its debug output if the card is in slot `C` (otherwise it'll bus error). There are ways to receive slot interrupts, and to find out which slots exist and are your card, but I haven't gone digging for them yet so I don't know what they are.
+
+As for how to make `write()` or `read()` block if no data is available, I'm sure it's possible (since ttys do it) but I haven't dug for that either.
 
 # Legalese
 
