@@ -39,7 +39,7 @@ Called during kernel init, (hopefully) before your device is opened. No paramete
 
 ## `open`
 
-Called when a process opens your device. The sole parameter is a `dev_t` indicating which device node was actually opened. For the sake of your sanity, use `minor()` from `<sys/sysmacros.h>` to extract the minor number from this and don't try to use the major number for anything. Return 0 for success, or some errno value for a failure.
+Called when a process opens your device. Return 0 for success, or some errno value for a failure. The sole parameter is a `dev_t` indicating which device node was actually opened. For the sake of your sanity, use `minor()` from `<sys/sysmacros.h>` to extract the minor number from this and don't try to use the major number for anything. (After all, you have no way to know what major number `autoconfig` assigned you. You *are* letting `autoconfig` assign you a guaranteed non-conflicting major number, right?)
 
 ## `close`
 
